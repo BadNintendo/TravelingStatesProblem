@@ -6,21 +6,8 @@ import matplotlib.colors as mcolors
 import json
 import os
 
-def bit_spread(value):
-    value = (value | (value << 8)) & 0x00FF00FF
-    value = (value | (value << 4)) & 0x0F0F0F0F
-    value = (value | (value << 2)) & 0x33333333
-    value = (value | (value << 1)) & 0x55555555
-    return value
-
-def morton_code(city):
-    x, y = city['x'], city['y']
-    x = int(x * 10000)
-    y = int(y * 10000)
-    return bit_spread(x) | (bit_spread(y) << 1)
-
 def is_path_intersect(new_path, paths):
-    for path in paths:
+    def check_intersection(path, new_path):
         path = [np.array(p) for p in path]
         new_path = [np.array(p) for p in new_path]
         if len(path[0]) == 2:
@@ -35,9 +22,12 @@ def is_path_intersect(new_path, paths):
         cross2 = np.cross(path[1] - path[0], new_path[1] - path[0])
         cross3 = np.cross(new_path[1] - new_path[0], path[0] - new_path[0])
         cross4 = np.cross(new_path[1] - new_path[0], path[1] - new_path[0])
-        if (np.all(cross1 * cross2 <= 0) and np.all(cross3 * cross4 <= 0)):
-            return True
-    return False
+        return (np.all(cross1 * cross2 <= 0) and np.all(cross3 * cross4 <= 0))
+
+    if not paths:
+        return False
+    
+    return check_intersection(paths[0], new_path) or is_path_intersect(new_path, paths[1:])
 
 def connect_cities(cities):
     if not cities:
@@ -46,27 +36,34 @@ def connect_cities(cities):
     cities_sorted = sorted(cities, key=lambda c: (c['x'], c['y']), reverse=True)
     sorted_route = [cities_sorted.pop(0)]
     paths = []
+
+    def find_closest_city(cities_sorted, current_coords, min_distance, closest_city_idx):
+        if not cities_sorted:
+            return min_distance, closest_city_idx
+        city = cities_sorted[0]
+        city_coords = [city.get('x', 0), city.get('y', 0)]
+        if 'z' in city:
+            city_coords.append(city['z'])
+        distance = np.linalg.norm(np.array(city_coords) - np.array(current_coords))
+        new_path = [np.array(current_coords), np.array(city_coords)]
+        if distance < min_distance and not is_path_intersect(new_path, paths):
+            min_distance = distance
+            closest_city_idx = 0
+        min_distance, closest_city_idx = find_closest_city(cities_sorted[1:], current_coords, min_distance, closest_city_idx)
+        return min_distance, closest_city_idx
+
     while cities_sorted:
         current_city = sorted_route[-1]
         current_coords = [current_city.get('x', 0), current_city.get('y', 0)]
         if 'z' in current_city:
             current_coords.append(current_city['z'])
-        min_distance = float('inf')
-        closest_city_idx = -1
-        for i, city in enumerate(cities_sorted):
-            city_coords = [city.get('x', 0), city.get('y', 0)]
-            if 'z' in city:
-                city_coords.append(city['z'])
-            distance = np.linalg.norm(np.array(city_coords) - np.array(current_coords))
-            if distance < min_distance:
-                new_path = [np.array(current_coords), np.array(city_coords)]
-                if not is_path_intersect(new_path, paths):
-                    min_distance = distance
-                    closest_city_idx = i
+
+        min_distance, closest_city_idx = find_closest_city(cities_sorted, current_coords, float('inf'), -1)
         sorted_route.append(cities_sorted.pop(closest_city_idx))
         new_path = [np.array([current_city['x'], current_city['y'], current_city.get('z', 0)]), 
                     np.array([sorted_route[-1]['x'], sorted_route[-1]['y'], sorted_route[-1].get('z', 0)])]
         paths.append(new_path)
+    
     sorted_route.append(sorted_route[0])
     return sorted_route
 
@@ -124,8 +121,25 @@ def load_data(file):
     return [], []
 
 def calculate_short_paths(cities):
-    # Implement your logic here
-    return []
+    states_found = []
+    states_not_found = []
+
+    for city in cities:
+        if 'state' in city and city['state'] not in states_found:
+            states_found.append(city['state'])
+        else:
+            states_not_found.append(city)
+
+    paths = []
+
+    for state in states_found:
+        state_cities = [city for city in cities if city.get('state') == state]
+        paths.extend(connect_cities(state_cities))
+
+    if states_not_found:
+        paths.extend(connect_cities(states_not_found))
+
+    return paths
 
 file = 'usa_states.json'
 primary, secondary = load_data(file)
