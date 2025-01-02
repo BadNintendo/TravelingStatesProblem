@@ -1,3 +1,5 @@
+For fun added cities to see what it would look like, The only time contraints testing the time or GPU processing any data in art. Otherwise your query is done already.
+![image](https://github.com/user-attachments/assets/f292ef31-441a-410f-996c-e9c6ad07352b)
 # City Path Visualization
 
 This Python project visualizes paths connecting cities or states using an algorithm that sorts and connects points based on their coordinates. The project supports 2D and 3D visualizations and includes animation capabilities.
